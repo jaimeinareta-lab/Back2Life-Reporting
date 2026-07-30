@@ -370,8 +370,16 @@
 
   <div id="tabTareas" style="display:none;">
     <div class="section">
-      <div class="section-header"><div class="section-title">Tareas y próximos pasos</div><div class="section-line"></div></div>
+      <div class="section-header"><div class="section-title">Tareas realizadas</div><div class="section-line"></div></div>
       <div class="chart-card" id="tareasContent" style="white-space:pre-wrap;line-height:1.7;font-size:14px;">Cargando...</div>
+    </div>
+    <div class="section">
+      <div class="section-header"><div class="section-title">Alertas</div><div class="section-line"></div></div>
+      <div class="chart-card" id="alertasContent" style="white-space:pre-wrap;line-height:1.7;font-size:14px;">Cargando...</div>
+    </div>
+    <div class="section">
+      <div class="section-header"><div class="section-title">Próximos pasos / Propuestas / Mejoras</div><div class="section-line"></div></div>
+      <div class="chart-card" id="proximosPasosContent" style="white-space:pre-wrap;line-height:1.7;font-size:14px;">Cargando...</div>
     </div>
     <footer class="footer">
       <div class="footer-logo">GROW<span>STUDIO</span>®</div>
@@ -600,13 +608,23 @@
   }
 
   async function loadTareas(mes) {
-    const el = document.getElementById('tareasContent');
-    el.textContent = 'Cargando...';
+    const elTareas = document.getElementById('tareasContent');
+    const elAlertas = document.getElementById('alertasContent');
+    const elProximos = document.getElementById('proximosPasosContent');
+    elTareas.textContent = 'Cargando...';
+    elAlertas.textContent = 'Cargando...';
+    elProximos.textContent = 'Cargando...';
     try {
-      const rows = await sbFetch('informes', {select:'contenido', cliente_id:`eq.${CONFIG.clienteId}`, mes:`eq.${mes}`});
-      el.textContent = rows.length ? rows[0].contenido : 'Todavía no hay informe generado para este mes.';
+      const rows = await sbFetch('informes', {select:'tareas,alertas,proximos_pasos', cliente_id:`eq.${CONFIG.clienteId}`, mes:`eq.${mes}`});
+      const row = rows[0] || {};
+      elTareas.textContent = row.tareas || 'Sin tareas registradas para este mes.';
+      elAlertas.textContent = row.alertas || 'Sin alertas para este mes.';
+      elProximos.textContent = row.proximos_pasos || 'Sin próximos pasos registrados para este mes.';
     } catch(e) {
-      el.textContent = 'No se pudo cargar el informe: ' + e.message;
+      const msg = 'No se pudo cargar el informe: ' + e.message;
+      elTareas.textContent = msg;
+      elAlertas.textContent = msg;
+      elProximos.textContent = msg;
     }
   }
 
