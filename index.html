@@ -371,7 +371,7 @@
   <div id="tabTareas" style="display:none;">
     <div class="section">
       <div class="section-header"><div class="section-title">Tareas realizadas</div><div class="section-line"></div></div>
-      <div class="chart-card" id="tareasContent" style="white-space:pre-wrap;line-height:1.7;font-size:14px;">Cargando...</div>
+      <div class="chart-card tareas-editable" id="tareasContent" style="white-space:pre-wrap;line-height:1.7;font-size:14px;cursor:text;" title="Doble clic para editar">Cargando...</div>
     </div>
     <div class="section">
       <div class="section-header"><div class="section-title">Alertas</div><div class="section-line"></div></div>
@@ -427,6 +427,28 @@
     const url=new URL(`${CONFIG.supabaseUrl}/rest/v1/${table}`);
     Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));
     const res=await fetch(url,{headers:{'apikey':CONFIG.supabaseKey,'Authorization':`Bearer ${CONFIG.supabaseKey}`}});
+    if(!res.ok) throw new Error(`Error ${res.status}`);
+    return res.json();
+  }
+
+  async function sbPatch(table,match,body) {
+    const url=new URL(`${CONFIG.supabaseUrl}/rest/v1/${table}`);
+    Object.entries(match).forEach(([k,v])=>url.searchParams.set(k,v));
+    const res=await fetch(url,{
+      method:'PATCH',
+      headers:{'apikey':CONFIG.supabaseKey,'Authorization':`Bearer ${CONFIG.supabaseKey}`,'Content-Type':'application/json','Prefer':'return=representation'},
+      body:JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error(`Error ${res.status}`);
+    return res.json();
+  }
+
+  async function sbInsert(table,body) {
+    const res=await fetch(`${CONFIG.supabaseUrl}/rest/v1/${table}`,{
+      method:'POST',
+      headers:{'apikey':CONFIG.supabaseKey,'Authorization':`Bearer ${CONFIG.supabaseKey}`,'Content-Type':'application/json','Prefer':'return=representation'},
+      body:JSON.stringify(body)
+    });
     if(!res.ok) throw new Error(`Error ${res.status}`);
     return res.json();
   }
@@ -618,6 +640,8 @@
       const rows = await sbFetch('informes', {select:'tareas,alertas,proximos_pasos', cliente_id:`eq.${CONFIG.clienteId}`, mes:`eq.${mes}`});
       const row = rows[0] || {};
       elTareas.textContent = row.tareas || 'Sin tareas registradas para este mes.';
+      elTareas.dataset.raw = row.tareas || '';
+      elTareas.dataset.mes = mes;
       elAlertas.textContent = row.alertas || 'Sin alertas para este mes.';
       elProximos.textContent = row.proximos_pasos || 'Sin próximos pasos registrados para este mes.';
     } catch(e) {
@@ -626,6 +650,48 @@
       elAlertas.textContent = msg;
       elProximos.textContent = msg;
     }
+  }
+
+  // ── Edición de "Tareas realizadas" — persiste en Supabase (informes.tareas) ──
+  function makeTareasEditable(el) {
+    if (el.querySelector('textarea')) return;
+    const current = el.dataset.raw || '';
+    const mes = el.dataset.mes || currentMes;
+    const ta = document.createElement('textarea');
+    ta.value = current;
+    ta.style.cssText = 'width:100%;min-height:180px;font:inherit;font-size:14px;line-height:1.7;border:1px solid var(--border);border-radius:6px;padding:10px;resize:vertical;';
+    el.textContent = '';
+    el.appendChild(ta);
+    ta.focus();
+    let saved = false;
+    async function save() {
+      if (saved) return;
+      saved = true;
+      const val = ta.value.trim();
+      if (val === current.trim()) {
+        el.textContent = current || 'Sin tareas registradas para este mes.';
+        return;
+      }
+      el.textContent = 'Guardando...';
+      try {
+        const updated = await sbPatch('informes', {cliente_id:`eq.${CONFIG.clienteId}`, mes:`eq.${mes}`}, {tareas: val});
+        if (!updated.length) {
+          await sbInsert('informes', {cliente_id: CONFIG.clienteId, mes, tareas: val});
+        }
+        el.textContent = val || 'Sin tareas registradas para este mes.';
+        el.dataset.raw = val;
+      } catch(e) {
+        el.textContent = 'Error al guardar: ' + e.message;
+        setTimeout(function() { el.textContent = current || 'Sin tareas registradas para este mes.'; }, 3000);
+      }
+    }
+    ta.addEventListener('blur', save);
+    ta.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        saved = true;
+        el.textContent = current || 'Sin tareas registradas para este mes.';
+      }
+    });
   }
 
   function showView(view) {
@@ -1141,6 +1207,8 @@
   document.addEventListener('dblclick', function(e) {
     var num = e.target.closest('[data-gs-num]');
     if (num) { e.preventDefault(); e.stopPropagation(); gsNumEdit(num); return; }
+    var tareasEl = e.target.closest('#tareasContent');
+    if (tareasEl) { e.preventDefault(); makeTareasEditable(tareasEl); return; }
     var cell = e.target.closest('.titulo-cell');
     if (!cell) return;
     e.preventDefault();
